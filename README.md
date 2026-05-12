@@ -33,7 +33,16 @@ notes are written on subsequent runs, so re-running is fast.
 
 ## Installation
 
-**Download a binary** from the [releases page](https://github.com/pradeep-stellar/granola/releases/latest):
+### Homebrew (macOS and Linux)
+
+```bash
+brew tap pradeep-stellar/brew
+brew install granola
+```
+
+### Download a binary
+
+Grab the latest from the [releases page](https://github.com/pradeep-stellar/granola/releases/latest):
 
 | Platform | File |
 |----------|------|
@@ -42,7 +51,7 @@ notes are written on subsequent runs, so re-running is fast.
 | Linux | `granola_Linux_x86_64.tar.gz` |
 | Windows | `granola_Windows_x86_64.zip` |
 
-Or install with Go:
+### Go
 
 ```bash
 go install github.com/pradeep-stellar/granola@latest
