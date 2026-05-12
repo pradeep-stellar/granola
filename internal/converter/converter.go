@@ -17,6 +17,7 @@ type Metadata struct {
 	CreatedAt string   `yaml:"created"`
 	UpdatedAt string   `yaml:"updated"`
 	Folders   []string `yaml:"folders,omitempty"`
+	Tags      []string `yaml:"tags,omitempty"`
 }
 
 // ToMarkdown converts a Document to Markdown format with YAML frontmatter.
@@ -27,6 +28,7 @@ func ToMarkdown(doc api.Document) (string, error) {
 		CreatedAt: doc.CreatedAt,
 		UpdatedAt: doc.UpdatedAt,
 		Folders:   doc.Folders,
+		Tags:      doc.Attendees,
 	}
 
 	yamlBytes, err := yaml.Marshal(metadata)
@@ -43,6 +45,15 @@ func ToMarkdown(doc api.Document) (string, error) {
 	if doc.Title != "" {
 		builder.WriteString("# ")
 		builder.WriteString(doc.Title)
+		builder.WriteString("\n\n")
+	}
+
+	if len(doc.Attendees) > 0 {
+		for _, name := range doc.Attendees {
+			builder.WriteString("[[")
+			builder.WriteString(name)
+			builder.WriteString("]] ")
+		}
 		builder.WriteString("\n\n")
 	}
 

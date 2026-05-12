@@ -110,6 +110,7 @@ func writeNotes(logger *log.Logger) error {
 		}
 		documents[i].Content = detail.Content
 		documents[i].Folders = detail.Folders
+		documents[i].Attendees = detail.Attendees
 		documents[i].Transcript = detail.Transcript
 		documents[i].RawFields = detail.RawFields
 	}

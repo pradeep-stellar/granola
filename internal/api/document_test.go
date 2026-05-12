@@ -152,6 +152,30 @@ func TestGetNoteDetail(t *testing.T) {
 		}
 	})
 
+	t.Run("parses attendees into document", func(t *testing.T) {
+		t.Parallel()
+
+		testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"id":"not_abc","title":"Team Sync","summary_markdown":"Notes","created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-02T00:00:00Z","attendees":[{"name":"Alice Smith","email":"alice@example.com"},{"name":"Bob Jones","email":"bob@example.com"}]}`))
+		}))
+		defer testServer.Close()
+
+		doc, err := GetNoteDetail(testServer.URL, "not_abc", "grn_testkey", false, testServer.Client())
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if len(doc.Attendees) != 2 {
+			t.Fatalf("expected 2 attendees, got %d", len(doc.Attendees))
+		}
+		if doc.Attendees[0] != "Alice Smith" {
+			t.Errorf("expected first attendee 'Alice Smith', got %q", doc.Attendees[0])
+		}
+		if doc.Attendees[1] != "Bob Jones" {
+			t.Errorf("expected second attendee 'Bob Jones', got %q", doc.Attendees[1])
+		}
+	})
+
 	t.Run("returns error for 404", func(t *testing.T) {
 		t.Parallel()
 

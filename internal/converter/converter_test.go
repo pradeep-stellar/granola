@@ -100,4 +100,35 @@ func TestToMarkdown(t *testing.T) {
 			t.Error("expected markdown to contain title")
 		}
 	})
+
+	t.Run("renders attendees as wikilinks and yaml tags", func(t *testing.T) {
+		t.Parallel()
+
+		doc := api.Document{
+			ID:        "test-id-att",
+			Title:     "Team Sync",
+			Content:   "Discussion notes",
+			CreatedAt: "2024-01-01T00:00:00Z",
+			UpdatedAt: "2024-01-01T00:00:00Z",
+			Attendees: []string{"Alice Smith", "Bob Jones"},
+		}
+
+		result, err := ToMarkdown(doc)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+
+		if !strings.Contains(result, "[[Alice Smith]]") {
+			t.Error("expected wikilink for Alice Smith")
+		}
+		if !strings.Contains(result, "[[Bob Jones]]") {
+			t.Error("expected wikilink for Bob Jones")
+		}
+		if !strings.Contains(result, "- Alice Smith") {
+			t.Error("expected Alice Smith in tags yaml list")
+		}
+		if !strings.Contains(result, "- Bob Jones") {
+			t.Error("expected Bob Jones in tags yaml list")
+		}
+	})
 }

@@ -24,6 +24,7 @@ type Document struct {
 	CreatedAt  string
 	UpdatedAt  string
 	Folders    []string            // folder names from folder_membership
+	Attendees  []string            // attendee names
 	Transcript []TranscriptSegment // nil unless fetched with include=transcript
 	RawFields  map[string]json.RawMessage
 }
@@ -57,19 +58,26 @@ type PublicNoteOwner struct {
 	Email string `json:"email"`
 }
 
+// Attendee represents a meeting participant.
+type Attendee struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
 // PublicNote represents a note as returned by the Granola public API.
 // The list endpoint populates only the metadata fields; content, folders, and
 // transcript require a detail call to GET /v1/notes/{id}.
 type PublicNote struct {
-	ID               string             `json:"id"`
-	Object           string             `json:"object"`
-	Title            string             `json:"title"`
-	Owner            PublicNoteOwner    `json:"owner"`
-	CreatedAt        string             `json:"created_at"`
-	UpdatedAt        string             `json:"updated_at"`
-	SummaryMarkdown  string             `json:"summary_markdown"`
-	SummaryText      string             `json:"summary_text"`
-	FolderMembership []FolderMembership `json:"folder_membership"`
+	ID               string              `json:"id"`
+	Object           string              `json:"object"`
+	Title            string              `json:"title"`
+	Owner            PublicNoteOwner     `json:"owner"`
+	CreatedAt        string              `json:"created_at"`
+	UpdatedAt        string              `json:"updated_at"`
+	SummaryMarkdown  string              `json:"summary_markdown"`
+	SummaryText      string              `json:"summary_text"`
+	FolderMembership []FolderMembership  `json:"folder_membership"`
+	Attendees        []Attendee          `json:"attendees"`
 	Transcript       []TranscriptSegment `json:"transcript"`
 
 	// RawFields captures every key in the response for debug inspection.
@@ -100,6 +108,17 @@ func (n PublicNote) folderNames() []string {
 	names := make([]string, len(n.FolderMembership))
 	for i, f := range n.FolderMembership {
 		names[i] = f.Name
+	}
+	return names
+}
+
+// attendeeNames extracts non-empty attendee names.
+func (n PublicNote) attendeeNames() []string {
+	var names []string
+	for _, a := range n.Attendees {
+		if a.Name != "" {
+			names = append(names, a.Name)
+		}
 	}
 	return names
 }
@@ -233,6 +252,7 @@ func GetNoteDetail(baseURL, noteID, apiKey string, withTranscript bool, httpClie
 		CreatedAt:  note.CreatedAt,
 		UpdatedAt:  note.UpdatedAt,
 		Folders:    note.folderNames(),
+		Attendees:  note.attendeeNames(),
 		Transcript: note.Transcript,
 		RawFields:  note.RawFields,
 	}, nil

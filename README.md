@@ -10,9 +10,9 @@
  |___/                                |_|
 ```
 
-[![Go](https://github.com/theantichris/granola/actions/workflows/go.yml/badge.svg)](https://github.com/theantichris/granola/actions/workflows/go.yml)
-[![Release](https://img.shields.io/github/v/release/theantichris/granola)](https://github.com/theantichris/granola/releases)
-[![License](https://img.shields.io/github/license/theantichris/granola)](LICENSE)
+[![Go](https://github.com/pradeep-stellar/granola/actions/workflows/go.yml/badge.svg)](https://github.com/pradeep-stellar/granola/actions/workflows/go.yml)
+[![Release](https://img.shields.io/github/v/release/pradeep-stellar/granola)](https://github.com/pradeep-stellar/granola/releases)
+[![License](https://img.shields.io/github/license/pradeep-stellar/granola)](LICENSE)
 
 Your [Granola](https://granola.ai) notes, as plain files on your machine.
 
@@ -33,7 +33,7 @@ notes are written on subsequent runs, so re-running is fast.
 
 ## Installation
 
-**Download a binary** from the [releases page](https://github.com/theantichris/granola/releases/latest):
+**Download a binary** from the [releases page](https://github.com/pradeep-stellar/granola/releases/latest):
 
 | Platform | File |
 |----------|------|
@@ -45,7 +45,7 @@ notes are written on subsequent runs, so re-running is fast.
 Or install with Go:
 
 ```bash
-go install github.com/theantichris/granola@latest
+go install github.com/pradeep-stellar/granola@latest
 ```
 
 ## Setup
@@ -81,15 +81,23 @@ updated: "2024-06-01T14:35:00Z"
 folders:
   - Work
   - Q2 Planning
+tags:
+  - Alice Smith
+  - Bob Jones
 ---
 
 # Team Sync
+
+[[Alice Smith]] [[Bob Jones]]
 
 ## Key decisions
 
 - Launched the new onboarding flow next Tuesday
 - Moved standup to 9:30am
 ```
+
+Attendees appear as `[[wikilinks]]` right after the title (clickable in Obsidian and similar tools)
+and as a `tags:` list in the frontmatter for easy filtering.
 
 Want the full transcript inline too?
 
@@ -180,7 +188,7 @@ Run `granola notes --help` for the full flag list, or add `--debug` to see detai
 Issues and PRs are welcome. To build from source:
 
 ```bash
-git clone https://github.com/theantichris/granola.git
+git clone https://github.com/pradeep-stellar/granola.git
 cd granola
 go build -o granola .
 go test ./...
@@ -191,3 +199,7 @@ Releases are automated via [GoReleaser](https://goreleaser.com/) — push a vers
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Acknowledgement
+
+This work is based on [Christopher Lamm](https://github.com/theantichris)'s  [Granola](https://github.com/theantichris/granola).
