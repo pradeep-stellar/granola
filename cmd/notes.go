@@ -33,16 +33,11 @@ func NewNotesCmd(logger *log.Logger) *cobra.Command {
 		Long:       "Export Granola notes to Markdown files in the specified output directory.",
 		SuggestFor: []string{"export"},
 		PreRunE: func(cmd *cobra.Command, args []string) error {
-			if err := viper.BindPFlag("timeout", cmd.Flags().Lookup("timeout")); err != nil {
-				return fmt.Errorf("%w: %s", ErrNotesCmdInit, err)
+			for _, flag := range []string{"timeout", "output", "transcript", "since"} {
+				if err := viper.BindPFlag(flag, cmd.Flags().Lookup(flag)); err != nil {
+					return fmt.Errorf("%w: %s", ErrNotesCmdInit, err)
+				}
 			}
-			if err := viper.BindPFlag("output", cmd.Flags().Lookup("output")); err != nil {
-				return fmt.Errorf("%w: %s", ErrNotesCmdInit, err)
-			}
-			if err := viper.BindPFlag("transcript", cmd.Flags().Lookup("transcript")); err != nil {
-				return fmt.Errorf("%w: %s", ErrNotesCmdInit, err)
-			}
-
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -50,14 +45,10 @@ func NewNotesCmd(logger *log.Logger) *cobra.Command {
 		},
 	}
 
-	var timeout time.Duration
-	cmd.Flags().DurationVar(&timeout, "timeout", 2*time.Minute, "HTTP timeout for API requests, default 2 minutes")
-
-	var output string
-	cmd.Flags().StringVar(&output, "output", "./notes", "Output directory for exported Markdown files")
-
-	var includeTranscript bool
-	cmd.Flags().BoolVar(&includeTranscript, "transcript", false, "Include transcript under ## Transcript heading in each note")
+	cmd.Flags().Duration("timeout", 2*time.Minute, "HTTP timeout for API requests")
+	cmd.Flags().String("output", "./notes", "Output directory for exported Markdown files")
+	cmd.Flags().Bool("transcript", false, "Include transcript under ## Transcript heading in each note")
+	cmd.Flags().String("since", "", "Only fetch notes updated after this date (YYYY-MM-DD or ISO 8601)")
 
 	return cmd
 }
@@ -76,42 +67,69 @@ func writeNotes(logger *log.Logger) error {
 
 	timeout := viper.GetDuration("timeout")
 	httpClient := &http.Client{Timeout: timeout}
+	since := strings.TrimSpace(viper.GetString("since"))
+	dryRun := viper.GetBool("dry-run")
+	includeTranscript := viper.GetBool("transcript")
 
-	logger.Info("Authenticating with GRANOLA_API_KEY")
-	fmt.Println("Using GRANOLA_API_KEY for authentication")
-	fmt.Println("Fetching documents from Granola API...")
-	logger.Info("Fetching documents from Granola API", "url", apiURL, "timeout", timeout)
+	if since != "" {
+		fmt.Printf("Fetching notes updated after %s...\n", since)
+	} else {
+		fmt.Println("Fetching notes from Granola API...")
+	}
+	logger.Info("Fetching notes", "url", apiURL, "since", since, "timeout", timeout)
 
-	documents, err := api.GetNotesWithAPIKey(apiURL, apiKey, httpClient)
+	documents, err := api.GetNotesWithAPIKey(apiURL, apiKey, since, httpClient)
 	if err != nil {
 		return fmt.Errorf("%w: %s", ErrDocumentExport, err)
 	}
 
-	logger.Info("Retrieved documents", "count", len(documents))
+	logger.Info("Retrieved notes", "count", len(documents))
 
-	if viper.GetBool("transcript") {
-		fmt.Println("Fetching transcripts...")
-		logger.Info("Fetching transcripts for all documents")
-		for i, doc := range documents {
-			segments, err := api.GetNoteTranscript(apiURL, doc.ID, apiKey, httpClient)
-			if err != nil {
-				logger.Warn("Failed to fetch transcript, skipping", "id", doc.ID, "error", err)
-				continue
-			}
-			documents[i].Transcript = segments
+	if len(documents) > 0 {
+		first := documents[0]
+		keys := make([]string, 0, len(first.RawFields))
+		for k := range first.RawFields {
+			keys = append(keys, k)
 		}
+		logger.Debug("first note API fields", "keys", keys)
+	}
+
+	total := len(documents)
+	if includeTranscript {
+		fmt.Printf("Fetching details and transcripts for %d notes...\n", total)
+	} else {
+		fmt.Printf("Fetching details for %d notes...\n", total)
+	}
+
+	for i := range documents {
+		fmt.Printf("  [%d/%d] %s\n", i+1, total, documents[i].Title)
+		detail, err := api.GetNoteDetail(apiURL, documents[i].ID, apiKey, includeTranscript, httpClient)
+		if err != nil {
+			logger.Warn("Failed to fetch note detail, skipping", "id", documents[i].ID, "error", err)
+			continue
+		}
+		documents[i].Content = detail.Content
+		documents[i].Folders = detail.Folders
+		documents[i].Transcript = detail.Transcript
+		documents[i].RawFields = detail.RawFields
 	}
 
 	outputDir := viper.GetString("output")
-	fmt.Printf("Exporting %d notes to %s...\n", len(documents), outputDir)
-	logger.Info("Writing documents to Markdown files", "output", outputDir)
+	if dryRun {
+		fmt.Printf("Dry run — %d notes would be exported to %s:\n", total, outputDir)
+	} else {
+		fmt.Printf("Exporting %d notes to %s...\n", total, outputDir)
+	}
+	logger.Info("Writing notes", "output", outputDir, "dry_run", dryRun)
 
-	if err := writer.Write(documents, outputDir, appFS); err != nil {
+	if err := writer.Write(documents, outputDir, appFS, logger, dryRun); err != nil {
 		return fmt.Errorf("%w: %s", ErrDocumentExport, err)
 	}
 
-	fmt.Println("✓ Export completed successfully")
-	logger.Info("Export completed successfully", "files", len(documents))
+	if !dryRun {
+		fmt.Println("✓ Export completed successfully")
+	}
+	logger.Info("Done", "files", total)
 
 	return nil
 }

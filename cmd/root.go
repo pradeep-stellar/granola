@@ -21,24 +21,24 @@ func NewRootCmd(logger *log.Logger) *cobra.Command {
 		Use:   "granola",
 		Short: "An application for exporting Granola meeting notes.",
 		Long:  "An application for exporting Granola meeting notes to Markdown files.",
-		PreRunE: func(cmd *cobra.Command, args []string) error {
-			if err := viper.BindPFlag("config", cmd.PersistentFlags().Lookup("config")); err != nil {
-				return fmt.Errorf("%w: %s", ErrRootCmd, err)
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			root := cmd.Root()
+			for _, key := range []string{"config", "debug", "dry-run"} {
+				if err := viper.BindPFlag(key, root.PersistentFlags().Lookup(key)); err != nil {
+					return fmt.Errorf("%w: %s", ErrRootCmd, err)
+				}
 			}
-
-			if err := viper.BindPFlag("debug", cmd.PersistentFlags().Lookup("debug")); err != nil {
-				return fmt.Errorf("%w: %s", ErrRootCmd, err)
-			}
-
 			return nil
 		},
 	}
 
 	var configFile string
 	var debug bool
+	var dryRun bool
 
 	cmd.PersistentFlags().StringVar(&configFile, "config", "", "config file (default is $HOME/.config.toml)")
 	cmd.PersistentFlags().BoolVar(&debug, "debug", false, "enable debug mode")
+	cmd.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "show what would be exported without writing any files")
 
 	cmd.AddCommand(NewNotesCmd(logger))
 	cmd.AddCommand(NewTranscriptsCmd(logger))

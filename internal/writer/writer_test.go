@@ -1,11 +1,13 @@
 package writer
 
 import (
+	"io"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/spf13/afero"
 	"github.com/theantichris/granola/internal/api"
 )
@@ -34,7 +36,7 @@ func TestWrite(t *testing.T) {
 			},
 		}
 
-		err := Write(docs, outputDir, fs)
+		err := Write(docs, outputDir, fs, log.New(io.Discard), false)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
@@ -48,8 +50,8 @@ func TestWrite(t *testing.T) {
 			t.Error("expected output directory to be created")
 		}
 
-		// Check that files were created
-		file1, err := afero.ReadFile(fs, filepath.Join(outputDir, "First Meeting.md"))
+		// Check that files were created with date prefix
+		file1, err := afero.ReadFile(fs, filepath.Join(outputDir, "2024-01-01-0000-First Meeting.md"))
 		if err != nil {
 			t.Fatalf("failed to read first file: %v", err)
 		}
@@ -58,7 +60,7 @@ func TestWrite(t *testing.T) {
 			t.Error("expected first file to contain title")
 		}
 
-		file2, err := afero.ReadFile(fs, filepath.Join(outputDir, "Second Meeting.md"))
+		file2, err := afero.ReadFile(fs, filepath.Join(outputDir, "2024-01-02-0000-Second Meeting.md"))
 		if err != nil {
 			t.Fatalf("failed to read second file: %v", err)
 		}
@@ -86,19 +88,19 @@ func TestWrite(t *testing.T) {
 				ID:        "doc-2",
 				Title:     "Meeting",
 				Content:   "Second meeting",
-				CreatedAt: "2024-01-02T00:00:00Z",
-				UpdatedAt: "2024-01-02T00:00:00Z",
+				CreatedAt: "2024-01-01T00:00:00Z", // same date → same prefix → collision
+				UpdatedAt: "2024-01-01T00:00:00Z",
 			},
 		}
 
-		err := Write(docs, outputDir, fs)
+		err := Write(docs, outputDir, fs, log.New(io.Discard), false)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
 
-		// Check that both files exist with different names
-		file1Exists, _ := afero.Exists(fs, filepath.Join(outputDir, "Meeting.md"))
-		file2Exists, _ := afero.Exists(fs, filepath.Join(outputDir, "Meeting_2.md"))
+		// Check that both files exist with different names (date prefix is the same, so _2 suffix kicks in)
+		file1Exists, _ := afero.Exists(fs, filepath.Join(outputDir, "2024-01-01-0000-Meeting.md"))
+		file2Exists, _ := afero.Exists(fs, filepath.Join(outputDir, "2024-01-01-0000-Meeting_2.md"))
 
 		if !file1Exists {
 			t.Error("expected first file to exist")
@@ -124,7 +126,7 @@ func TestWrite(t *testing.T) {
 			},
 		}
 
-		err := Write(docs, outputDir, fs)
+		err := Write(docs, outputDir, fs, log.New(io.Discard), false)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
@@ -140,8 +142,8 @@ func TestWrite(t *testing.T) {
 			t.Logf("  - %s", f.Name())
 		}
 
-		// Check that file was created with sanitized name
-		fileExists, _ := afero.Exists(fs, filepath.Join(outputDir, "Meeting_ Notes_Ideas.md"))
+		// Check that file was created with date prefix and sanitized name
+		fileExists, _ := afero.Exists(fs, filepath.Join(outputDir, "2024-01-01-0000-Meeting_ Notes_Ideas.md"))
 		if !fileExists {
 			t.Error("expected sanitized filename to exist")
 		}
@@ -163,13 +165,13 @@ func TestWrite(t *testing.T) {
 			},
 		}
 
-		err := Write(docs, outputDir, fs)
+		err := Write(docs, outputDir, fs, log.New(io.Discard), false)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
 
-		// Check that file was created with ID as filename
-		fileExists, _ := afero.Exists(fs, filepath.Join(outputDir, "doc-abc-123.md"))
+		// Check that file was created with date prefix and ID as filename
+		fileExists, _ := afero.Exists(fs, filepath.Join(outputDir, "2024-01-01-0000-doc-abc-123.md"))
 		if !fileExists {
 			t.Error("expected file with ID as name to exist")
 		}
@@ -191,26 +193,26 @@ func TestWrite(t *testing.T) {
 		}
 
 		// Write the initial document
-		err := Write([]api.Document{initialDoc}, outputDir, fs)
+		err := Write([]api.Document{initialDoc}, outputDir, fs, log.New(io.Discard), false)
 		if err != nil {
 			t.Fatalf("failed to write initial document: %v", err)
 		}
 
 		// Read the initial content
-		initialContent, err := afero.ReadFile(fs, filepath.Join(outputDir, "Test Note.md"))
+		initialContent, err := afero.ReadFile(fs, filepath.Join(outputDir, "2024-01-01-0000-Test Note.md"))
 		if err != nil {
 			t.Fatalf("failed to read initial file: %v", err)
 		}
 
 		// Try to write the same document again (no update)
 		sameDoc := initialDoc
-		err = Write([]api.Document{sameDoc}, outputDir, fs)
+		err = Write([]api.Document{sameDoc}, outputDir, fs, log.New(io.Discard), false)
 		if err != nil {
 			t.Fatalf("failed on second write: %v", err)
 		}
 
 		// Content should be unchanged
-		secondContent, err := afero.ReadFile(fs, filepath.Join(outputDir, "Test Note.md"))
+		secondContent, err := afero.ReadFile(fs, filepath.Join(outputDir, "2024-01-01-0000-Test Note.md"))
 		if err != nil {
 			t.Fatalf("failed to read file after second write: %v", err)
 		}
@@ -236,13 +238,13 @@ func TestWrite(t *testing.T) {
 		}
 
 		// Write the initial document
-		err := Write([]api.Document{initialDoc}, outputDir, fs)
+		err := Write([]api.Document{initialDoc}, outputDir, fs, log.New(io.Discard), false)
 		if err != nil {
 			t.Fatalf("failed to write initial document: %v", err)
 		}
 
 		// Set file mod time to earlier time to simulate it being older
-		filePath := filepath.Join(outputDir, "Test Note.md")
+		filePath := filepath.Join(outputDir, "2024-01-01-0000-Test Note.md")
 		oldTime := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
 		err = fs.Chtimes(filePath, oldTime, oldTime)
 		if err != nil {
@@ -259,7 +261,7 @@ func TestWrite(t *testing.T) {
 		}
 
 		// Write the updated document
-		err = Write([]api.Document{updatedDoc}, outputDir, fs)
+		err = Write([]api.Document{updatedDoc}, outputDir, fs, log.New(io.Discard), false)
 		if err != nil {
 			t.Fatalf("failed to write updated document: %v", err)
 		}

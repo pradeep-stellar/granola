@@ -41,20 +41,18 @@ func FormatTranscript(doc api.Document, segments []api.TranscriptSegment) string
 		builder.WriteString("\n")
 	}
 
-	builder.WriteString("Segments: ")
-	builder.WriteString(fmt.Sprintf("%d", len(segments)))
-	builder.WriteString("\n")
-
+	builder.WriteString(fmt.Sprintf("Segments: %d\n", len(segments)))
 	builder.WriteString(strings.Repeat("=", 80))
 	builder.WriteString("\n\n")
 
 	for _, segment := range segments {
-		startTime := parseTimestamp(segment.StartTimestamp)
-		speaker := "System"
-		if segment.Source == "microphone" {
-			speaker = "You"
+		ts := parseTimestamp(segment.StartTime)
+		label := speakerLabel(segment.Speaker)
+		if ts != "" {
+			builder.WriteString(fmt.Sprintf("[%s] %s: %s\n", ts, label, segment.Text))
+		} else {
+			builder.WriteString(fmt.Sprintf("%s: %s\n", label, segment.Text))
 		}
-		builder.WriteString(fmt.Sprintf("[%s] %s: %s\n", startTime, speaker, segment.Text))
 	}
 
 	return builder.String()
@@ -68,21 +66,39 @@ func FormatTranscriptMarkdown(segments []api.TranscriptSegment) string {
 
 	var builder strings.Builder
 	for _, segment := range segments {
-		startTime := parseTimestamp(segment.StartTimestamp)
-		speaker := "System"
-		if segment.Source == "microphone" {
-			speaker = "You"
+		ts := parseTimestamp(segment.StartTime)
+		label := speakerLabel(segment.Speaker)
+		if ts != "" {
+			builder.WriteString(fmt.Sprintf("[%s] %s: %s\n", ts, label, segment.Text))
+		} else {
+			builder.WriteString(fmt.Sprintf("%s: %s\n", label, segment.Text))
 		}
-		builder.WriteString(fmt.Sprintf("[%s] %s: %s\n", startTime, speaker, segment.Text))
 	}
 	return builder.String()
 }
 
-// parseTimestamp converts ISO 8601 timestamp to HH:MM:SS format.
+// speakerLabel returns a human-readable label for a transcript speaker.
+// On macOS: "microphone" = "You", "speaker" = "Speaker".
+// On iOS: diarization_label ("Speaker A", "Speaker B", …) is used when present.
+func speakerLabel(s api.TranscriptSpeaker) string {
+	if s.DiarizationLabel != "" {
+		return s.DiarizationLabel
+	}
+	if s.Source == "microphone" {
+		return "You"
+	}
+	return "Speaker"
+}
+
+// parseTimestamp converts an ISO 8601 timestamp to HH:MM:SS format.
+// Returns an empty string if the timestamp is empty or cannot be parsed.
 func parseTimestamp(timestamp string) string {
+	if timestamp == "" {
+		return ""
+	}
 	t, err := time.Parse(time.RFC3339, timestamp)
 	if err != nil {
-		return timestamp
+		return ""
 	}
 	return t.Format("15:04:05")
 }

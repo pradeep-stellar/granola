@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/spf13/afero"
 	"github.com/theantichris/granola/internal/api"
 	"github.com/theantichris/granola/internal/converter"
@@ -18,27 +19,32 @@ var invalidFileChars = regexp.MustCompile(`[<>:"/\\|?*\x00-\x1f]`)
 // Write writes documents to Markdown files in the specified output directory.
 // It only writes files if they don't exist or if the document's updated_at timestamp
 // is newer than the existing file's modification time.
-func Write(docs []api.Document, outputDir string, fs afero.Fs) error {
-	if err := fs.MkdirAll(outputDir, 0755); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
+// When dryRun is true the files are not written; only what would be written is printed.
+func Write(docs []api.Document, outputDir string, fs afero.Fs, logger *log.Logger, dryRun bool) error {
+	if !dryRun {
+		if err := fs.MkdirAll(outputDir, 0755); err != nil {
+			return fmt.Errorf("failed to create output directory: %w", err)
+		}
 	}
 
 	usedFilenames := make(map[string]int)
+	written := 0
+	skipped := 0
 
 	for _, doc := range docs {
-		filename := sanitizeFilename(doc.Title, doc.ID)
+		filename := datePrefix(doc.CreatedAt) + sanitizeFilename(doc.Title, doc.ID)
 		filename = makeUnique(filename, usedFilenames)
 		usedFilenames[filename]++
 
 		filePath := filepath.Join(outputDir, filename+".md")
 
-		// Check if file exists and compare timestamps
 		shouldWrite, err := shouldUpdateFile(fs, filePath, doc.UpdatedAt)
 		if err != nil {
 			return fmt.Errorf("failed to check file status for %s: %w", filePath, err)
 		}
 
 		if !shouldWrite {
+			skipped++
 			continue
 		}
 
@@ -47,9 +53,33 @@ func Write(docs []api.Document, outputDir string, fs afero.Fs) error {
 			return fmt.Errorf("failed to convert document %s: %w", doc.ID, err)
 		}
 
-		if err := afero.WriteFile(fs, filePath, []byte(markdown), 0644); err != nil {
-			return fmt.Errorf("failed to write file %s: %w", filePath, err)
+		preview := doc.Content
+		if len(preview) > 30 {
+			preview = preview[:30]
 		}
+
+		if dryRun {
+			fmt.Printf("  [dry-run] %-50s %s\n", doc.Title, preview)
+		} else {
+			fmt.Printf("  %-50s %s\n", doc.Title, preview)
+		}
+
+		if logger.GetLevel() <= log.DebugLevel {
+			logger.Debug("markdown preview", "file", filePath)
+			fmt.Println(markdown)
+		}
+
+		if !dryRun {
+			if err := afero.WriteFile(fs, filePath, []byte(markdown), 0644); err != nil {
+				return fmt.Errorf("failed to write file %s: %w", filePath, err)
+			}
+		}
+
+		written++
+	}
+
+	if dryRun {
+		fmt.Printf("  [dry-run] %d would be written, %d up to date\n", written, skipped)
 	}
 
 	return nil
@@ -114,6 +144,16 @@ func sanitizeFilename(title, id string) string {
 	}
 
 	return name
+}
+
+// datePrefix formats a RFC3339 timestamp as "YYYY-mm-dd-HHMM-" for use as a filename prefix.
+// Returns an empty string if the timestamp cannot be parsed.
+func datePrefix(createdAt string) string {
+	t, err := time.Parse(time.RFC3339, createdAt)
+	if err != nil {
+		return ""
+	}
+	return t.Format("2006-01-02-1504-")
 }
 
 // makeUnique appends a number to a filename if it already exists.

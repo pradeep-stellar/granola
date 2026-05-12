@@ -30,11 +30,11 @@ func NewTranscriptsCmd(logger *log.Logger) *cobra.Command {
 		Short: "Export Granola transcripts to text files.",
 		Long:  "Export raw Granola transcripts with timestamps to plain text files in the specified output directory.",
 		PreRunE: func(cmd *cobra.Command, args []string) error {
-			if err := viper.BindPFlag("transcript-output", cmd.Flags().Lookup("output")); err != nil {
-				return fmt.Errorf("%w: %s", ErrTranscriptCmdInit, err)
-			}
-			if err := viper.BindPFlag("transcript-timeout", cmd.Flags().Lookup("timeout")); err != nil {
-				return fmt.Errorf("%w: %s", ErrTranscriptCmdInit, err)
+			for _, flag := range []string{"transcript-output", "transcript-timeout", "transcript-since"} {
+				f := strings.TrimPrefix(flag, "transcript-")
+				if err := viper.BindPFlag(flag, cmd.Flags().Lookup(f)); err != nil {
+					return fmt.Errorf("%w: %s", ErrTranscriptCmdInit, err)
+				}
 			}
 			return nil
 		},
@@ -43,11 +43,9 @@ func NewTranscriptsCmd(logger *log.Logger) *cobra.Command {
 		},
 	}
 
-	var output string
-	cmd.Flags().StringVar(&output, "output", "./transcripts", "Output directory for exported transcript files")
-
-	var timeout time.Duration
-	cmd.Flags().DurationVar(&timeout, "timeout", 2*time.Minute, "HTTP timeout for API requests, default 2 minutes")
+	cmd.Flags().String("output", "./transcripts", "Output directory for exported transcript files")
+	cmd.Flags().Duration("timeout", 2*time.Minute, "HTTP timeout for API requests")
+	cmd.Flags().String("since", "", "Only fetch notes updated after this date (YYYY-MM-DD or ISO 8601)")
 
 	return cmd
 }
@@ -66,11 +64,17 @@ func writeTranscripts(logger *log.Logger) error {
 
 	timeout := viper.GetDuration("transcript-timeout")
 	httpClient := &http.Client{Timeout: timeout}
+	since := strings.TrimSpace(viper.GetString("transcript-since"))
+	dryRun := viper.GetBool("dry-run")
 
-	fmt.Println("Fetching notes from Granola API...")
-	logger.Info("Fetching notes from Granola API", "url", apiURL)
+	if since != "" {
+		fmt.Printf("Fetching notes updated after %s...\n", since)
+	} else {
+		fmt.Println("Fetching notes from Granola API...")
+	}
+	logger.Info("Fetching notes", "url", apiURL, "since", since)
 
-	documents, err := api.GetNotesWithAPIKey(apiURL, apiKey, httpClient)
+	documents, err := api.GetNotesWithAPIKey(apiURL, apiKey, since, httpClient)
 	if err != nil {
 		return fmt.Errorf("%w: %s", ErrTranscriptExport, err)
 	}
@@ -78,32 +82,40 @@ func writeTranscripts(logger *log.Logger) error {
 	logger.Info("Retrieved notes", "count", len(documents))
 
 	outputDir := viper.GetString("transcript-output")
-	fmt.Printf("Exporting transcripts for %d notes to %s...\n", len(documents), outputDir)
-	logger.Info("Writing transcripts to files", "output", outputDir)
+	total := len(documents)
 
-	if err := appFS.MkdirAll(outputDir, 0755); err != nil {
-		return fmt.Errorf("%w: failed to create output directory: %s", ErrTranscriptExport, err)
+	if dryRun {
+		fmt.Printf("Dry run — fetching transcripts for %d notes (nothing will be written)...\n", total)
+	} else {
+		fmt.Printf("Fetching transcripts for %d notes, exporting to %s...\n", total, outputDir)
+	}
+
+	if !dryRun {
+		if err := appFS.MkdirAll(outputDir, 0755); err != nil {
+			return fmt.Errorf("%w: failed to create output directory: %s", ErrTranscriptExport, err)
+		}
 	}
 
 	usedFilenames := make(map[string]bool)
 	count := 0
 
-	for _, doc := range documents {
-		filename := doc.Title
-		if filename == "" {
-			filename = doc.ID
+	for i, doc := range documents {
+		title := doc.Title
+		if title == "" {
+			title = doc.ID
 		}
-		filename = sanitizeFilename(filename)
+		filename := transcriptDatePrefix(doc.CreatedAt) + sanitizeFilename(title)
 		filename = makeUnique(filename, usedFilenames)
 		usedFilenames[filename] = true
-
 		filePath := filepath.Join(outputDir, filename+".txt")
 
-		if !shouldUpdateFileByDoc(doc, filePath) {
+		if !dryRun && !shouldUpdateFileByDoc(doc, filePath) {
 			continue
 		}
 
+		fmt.Printf("  [%d/%d] %s\n", i+1, total, doc.Title)
 		logger.Debug("Fetching transcript", "id", doc.ID, "title", doc.Title)
+
 		segments, err := api.GetNoteTranscript(apiURL, doc.ID, apiKey, httpClient)
 		if err != nil {
 			logger.Warn("Failed to fetch transcript, skipping", "id", doc.ID, "error", err)
@@ -119,6 +131,12 @@ func writeTranscripts(logger *log.Logger) error {
 			continue
 		}
 
+		if dryRun {
+			fmt.Printf("    [dry-run] would write %s (%d segments)\n", filePath, len(segments))
+			count++
+			continue
+		}
+
 		if err := afero.WriteFile(appFS, filePath, []byte(content), 0644); err != nil {
 			return fmt.Errorf("%w: failed to write file %s: %s", ErrTranscriptExport, filePath, err)
 		}
@@ -126,10 +144,23 @@ func writeTranscripts(logger *log.Logger) error {
 		count++
 	}
 
-	fmt.Println("✓ Export completed successfully")
-	logger.Info("Export completed successfully", "files", count)
+	if dryRun {
+		fmt.Printf("  [dry-run] %d transcripts would be written\n", count)
+	} else {
+		fmt.Println("✓ Export completed successfully")
+		logger.Info("Export completed successfully", "files", count)
+	}
 
 	return nil
+}
+
+// transcriptDatePrefix formats a RFC3339 timestamp as "YYYY-mm-dd-HHMM-" for use as a filename prefix.
+func transcriptDatePrefix(createdAt string) string {
+	t, err := time.Parse(time.RFC3339, createdAt)
+	if err != nil {
+		return ""
+	}
+	return t.Format("2006-01-02-1504-")
 }
 
 // sanitizeFilename removes invalid characters and limits length.
@@ -146,7 +177,6 @@ func makeUnique(filename string, used map[string]bool) string {
 	if !used[filename] {
 		return filename
 	}
-
 	counter := 2
 	for {
 		uniqueName := fmt.Sprintf("%s_%d", filename, counter)
@@ -163,11 +193,9 @@ func shouldUpdateFileByDoc(doc api.Document, filePath string) bool {
 	if err != nil {
 		return true
 	}
-
 	docUpdated, err := time.Parse(time.RFC3339, doc.UpdatedAt)
 	if err != nil {
 		return true
 	}
-
 	return docUpdated.After(fileInfo.ModTime())
 }

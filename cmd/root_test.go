@@ -42,9 +42,9 @@ func TestNewRootCmd(t *testing.T) {
 			t.Error("expected debug flag to be set")
 		}
 
-		// Check PreRunE is set
-		if cmd.PreRunE == nil {
-			t.Error("expected PreRunE to be set")
+		// Check PersistentPreRunE is set (runs for all subcommands)
+		if cmd.PersistentPreRunE == nil {
+			t.Error("expected PersistentPreRunE to be set")
 		}
 
 		// Check notes subcommand is added

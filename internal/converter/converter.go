@@ -12,17 +12,21 @@ import (
 
 // Metadata represents the YAML frontmatter for a Markdown file.
 type Metadata struct {
-	ID        string `yaml:"id"`
-	CreatedAt string `yaml:"created"`
-	UpdatedAt string `yaml:"updated"`
+	ID        string   `yaml:"id"`
+	Title     string   `yaml:"title"`
+	CreatedAt string   `yaml:"created"`
+	UpdatedAt string   `yaml:"updated"`
+	Folders   []string `yaml:"folders,omitempty"`
 }
 
 // ToMarkdown converts a Document to Markdown format with YAML frontmatter.
 func ToMarkdown(doc api.Document) (string, error) {
 	metadata := Metadata{
 		ID:        doc.ID,
+		Title:     doc.Title,
 		CreatedAt: doc.CreatedAt,
 		UpdatedAt: doc.UpdatedAt,
+		Folders:   doc.Folders,
 	}
 
 	yamlBytes, err := yaml.Marshal(metadata)
