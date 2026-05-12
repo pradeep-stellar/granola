@@ -17,9 +17,11 @@ import (
 
 var appFS = afero.NewOsFs()
 
+const granolaPublicAPIURL = "https://public-api.granola.ai/v1/notes"
+
 var (
 	ErrNotesCmdInit   = errors.New("failed to initialize the notes command")
-	ErrSupabaseEmpty  = errors.New("supabase cannot be empty")
+	ErrNoCredentials  = errors.New("no API credentials configured")
 	ErrDocumentExport = errors.New("failed to export documents")
 )
 
@@ -37,6 +39,9 @@ func NewNotesCmd(logger *log.Logger) *cobra.Command {
 			if err := viper.BindPFlag("output", cmd.Flags().Lookup("output")); err != nil {
 				return fmt.Errorf("%w: %s", ErrNotesCmdInit, err)
 			}
+			if err := viper.BindPFlag("transcript", cmd.Flags().Lookup("transcript")); err != nil {
+				return fmt.Errorf("%w: %s", ErrNotesCmdInit, err)
+			}
 
 			return nil
 		},
@@ -51,34 +56,51 @@ func NewNotesCmd(logger *log.Logger) *cobra.Command {
 	var output string
 	cmd.Flags().StringVar(&output, "output", "./notes", "Output directory for exported Markdown files")
 
+	var includeTranscript bool
+	cmd.Flags().BoolVar(&includeTranscript, "transcript", false, "Include transcript under ## Transcript heading in each note")
+
 	return cmd
 }
 
-// writeNotes loads the contents of supabase.json and uses it to call and retrieve
-// the documents from the Granola API, then writes them to Markdown files.
+// writeNotes fetches notes from the Granola public API and writes them to Markdown files.
 func writeNotes(logger *log.Logger) error {
-	filename := viper.GetString("supabase")
-
-	if strings.TrimSpace(filename) == "" {
-		return fmt.Errorf("%w: set the path to supabase.json via flag, config file, or env variable", ErrSupabaseEmpty)
+	apiKey := strings.TrimSpace(viper.GetString("granola_api_key"))
+	if apiKey == "" {
+		return fmt.Errorf("%w: set GRANOLA_API_KEY environment variable", ErrNoCredentials)
 	}
 
-	logger.Info("Reading supabase configuration", "file", filename)
-	supabaseContent, err := afero.ReadFile(appFS, filename)
-	if err != nil {
-		return fmt.Errorf("%w: %s", ErrDocumentExport, err)
+	apiURL := viper.GetString("api_url")
+	if apiURL == "" {
+		apiURL = granolaPublicAPIURL
 	}
 
 	timeout := viper.GetDuration("timeout")
+	httpClient := &http.Client{Timeout: timeout}
+
+	logger.Info("Authenticating with GRANOLA_API_KEY")
+	fmt.Println("Using GRANOLA_API_KEY for authentication")
 	fmt.Println("Fetching documents from Granola API...")
-	logger.Info("Fetching documents from Granola API", "timeout", timeout)
-	httpClient := http.Client{Timeout: timeout}
-	documents, err := api.GetDocuments("https://api.granola.ai/v2/get-documents", supabaseContent, &httpClient)
+	logger.Info("Fetching documents from Granola API", "url", apiURL, "timeout", timeout)
+
+	documents, err := api.GetNotesWithAPIKey(apiURL, apiKey, httpClient)
 	if err != nil {
 		return fmt.Errorf("%w: %s", ErrDocumentExport, err)
 	}
 
 	logger.Info("Retrieved documents", "count", len(documents))
+
+	if viper.GetBool("transcript") {
+		fmt.Println("Fetching transcripts...")
+		logger.Info("Fetching transcripts for all documents")
+		for i, doc := range documents {
+			segments, err := api.GetNoteTranscript(apiURL, doc.ID, apiKey, httpClient)
+			if err != nil {
+				logger.Warn("Failed to fetch transcript, skipping", "id", doc.ID, "error", err)
+				continue
+			}
+			documents[i].Transcript = segments
+		}
+	}
 
 	outputDir := viper.GetString("output")
 	fmt.Printf("Exporting %d notes to %s...\n", len(documents), outputDir)

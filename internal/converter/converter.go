@@ -6,26 +6,23 @@ import (
 	"strings"
 
 	"github.com/theantichris/granola/internal/api"
-	"github.com/theantichris/granola/internal/prosemirror"
+	"github.com/theantichris/granola/internal/transcript"
 	"gopkg.in/yaml.v3"
 )
 
 // Metadata represents the YAML frontmatter for a Markdown file.
 type Metadata struct {
-	ID        string   `yaml:"id"`
-	CreatedAt string   `yaml:"created"`
-	UpdatedAt string   `yaml:"updated"`
-	Tags      []string `yaml:"tags,omitempty"`
+	ID        string `yaml:"id"`
+	CreatedAt string `yaml:"created"`
+	UpdatedAt string `yaml:"updated"`
 }
 
 // ToMarkdown converts a Document to Markdown format with YAML frontmatter.
-// It extracts content from the ProseMirror document structure if available.
 func ToMarkdown(doc api.Document) (string, error) {
 	metadata := Metadata{
 		ID:        doc.ID,
 		CreatedAt: doc.CreatedAt,
 		UpdatedAt: doc.UpdatedAt,
-		Tags:      doc.Tags,
 	}
 
 	yamlBytes, err := yaml.Marshal(metadata)
@@ -35,39 +32,25 @@ func ToMarkdown(doc api.Document) (string, error) {
 
 	var builder strings.Builder
 
-	// Write YAML frontmatter
 	builder.WriteString("---\n")
 	builder.Write(yamlBytes)
 	builder.WriteString("---\n\n")
 
-	// Write title as heading
 	if doc.Title != "" {
 		builder.WriteString("# ")
 		builder.WriteString(doc.Title)
 		builder.WriteString("\n\n")
 	}
 
-	// Write content from ProseMirror if available, otherwise fall back to plain content field
-	// Priority: Notes (new API) > LastViewedPanel.Content (ProseMirror) > OriginalContent (HTML) > Content (raw transcript)
-	var content string
-	if doc.Notes != nil {
-		content = strings.TrimSpace(prosemirror.ConvertToMarkdown(doc.Notes))
-	}
-	if content == "" && doc.LastViewedPanel != nil && doc.LastViewedPanel.Content != nil {
-		content = strings.TrimSpace(prosemirror.ConvertToMarkdown(doc.LastViewedPanel.Content))
-	}
-	if content == "" && doc.LastViewedPanel != nil && doc.LastViewedPanel.OriginalContent != "" {
-		content = doc.LastViewedPanel.OriginalContent
-	}
-	if content == "" && doc.Content != "" {
-		content = doc.Content
-	}
-
+	content := strings.TrimSpace(doc.Content)
 	if content != "" {
 		builder.WriteString(content)
-		if !strings.HasSuffix(content, "\n") {
-			builder.WriteString("\n")
-		}
+		builder.WriteString("\n")
+	}
+
+	if len(doc.Transcript) > 0 {
+		builder.WriteString("\n## Transcript\n\n")
+		builder.WriteString(transcript.FormatTranscriptMarkdown(doc.Transcript))
 	}
 
 	return builder.String(), nil

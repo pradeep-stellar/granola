@@ -42,11 +42,6 @@ func TestNewRootCmd(t *testing.T) {
 			t.Error("expected debug flag to be set")
 		}
 
-		supabaseFlag := cmd.PersistentFlags().Lookup("supabase")
-		if supabaseFlag == nil {
-			t.Error("expected supabase flag to be set")
-		}
-
 		// Check PreRunE is set
 		if cmd.PreRunE == nil {
 			t.Error("expected PreRunE to be set")
@@ -104,8 +99,7 @@ func TestInitConfig(t *testing.T) {
 
 		tmpDir := t.TempDir()
 		envFile := filepath.Join(tmpDir, ".env")
-		envContent := `DEBUG_MODE=true
-SUPABASE_FILE=/path/to/supabase.json`
+		envContent := `DEBUG_MODE=true`
 
 		if err := os.WriteFile(envFile, []byte(envContent), 0644); err != nil {
 			t.Fatalf("failed to write to test .env file: %v", err)
@@ -129,10 +123,6 @@ SUPABASE_FILE=/path/to/supabase.json`
 		initConfig(logger)
 		if !viper.GetBool("debug") {
 			t.Error("expected DEBUG_MODE from .env to be loaded")
-		}
-
-		if viper.GetString("supabase") != "/path/to/supabase.json" {
-			t.Errorf("expected SUPABASE_FILE from .env to be loaded, got %s", viper.GetString("supabase"))
 		}
 	})
 }

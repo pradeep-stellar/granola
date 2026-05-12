@@ -6,18 +6,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/theantichris/granola/internal/cache"
+	"github.com/theantichris/granola/internal/api"
 )
 
-// FormatTranscript formats transcript segments into a readable text format.
-func FormatTranscript(doc cache.Document, segments []cache.TranscriptSegment) string {
+// FormatTranscript formats transcript segments into a readable text format for file export.
+func FormatTranscript(doc api.Document, segments []api.TranscriptSegment) string {
 	if len(segments) == 0 {
 		return ""
 	}
 
 	var builder strings.Builder
 
-	// Header
 	builder.WriteString(strings.Repeat("=", 80))
 	builder.WriteString("\n")
 
@@ -49,24 +48,33 @@ func FormatTranscript(doc cache.Document, segments []cache.TranscriptSegment) st
 	builder.WriteString(strings.Repeat("=", 80))
 	builder.WriteString("\n\n")
 
-	// Transcript segments
 	for _, segment := range segments {
-		// Parse timestamp
 		startTime := parseTimestamp(segment.StartTimestamp)
-
-		// Format speaker
 		speaker := "System"
 		if segment.Source == "microphone" {
 			speaker = "You"
 		}
-
-		// Format: [HH:MM:SS] Speaker: Text
-		builder.WriteString(fmt.Sprintf("[%s] %s: %s\n",
-			startTime,
-			speaker,
-			segment.Text))
+		builder.WriteString(fmt.Sprintf("[%s] %s: %s\n", startTime, speaker, segment.Text))
 	}
 
+	return builder.String()
+}
+
+// FormatTranscriptMarkdown formats transcript segments as Markdown lines for inline inclusion.
+func FormatTranscriptMarkdown(segments []api.TranscriptSegment) string {
+	if len(segments) == 0 {
+		return ""
+	}
+
+	var builder strings.Builder
+	for _, segment := range segments {
+		startTime := parseTimestamp(segment.StartTimestamp)
+		speaker := "System"
+		if segment.Source == "microphone" {
+			speaker = "You"
+		}
+		builder.WriteString(fmt.Sprintf("[%s] %s: %s\n", startTime, speaker, segment.Text))
+	}
 	return builder.String()
 }
 
@@ -74,8 +82,7 @@ func FormatTranscript(doc cache.Document, segments []cache.TranscriptSegment) st
 func parseTimestamp(timestamp string) string {
 	t, err := time.Parse(time.RFC3339, timestamp)
 	if err != nil {
-		return timestamp // Return as-is if parsing fails
+		return timestamp
 	}
-
 	return t.Format("15:04:05")
 }

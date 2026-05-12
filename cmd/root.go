@@ -30,21 +30,15 @@ func NewRootCmd(logger *log.Logger) *cobra.Command {
 				return fmt.Errorf("%w: %s", ErrRootCmd, err)
 			}
 
-			if err := viper.BindPFlag("supabase", cmd.PersistentFlags().Lookup("supabase")); err != nil {
-				return fmt.Errorf("%w: %s", ErrRootCmd, err)
-			}
-
 			return nil
 		},
 	}
 
 	var configFile string
 	var debug bool
-	var supabaseFile string
 
 	cmd.PersistentFlags().StringVar(&configFile, "config", "", "config file (default is $HOME/.config.toml)")
 	cmd.PersistentFlags().BoolVar(&debug, "debug", false, "enable debug mode")
-	cmd.PersistentFlags().StringVar(&supabaseFile, "supabase", "", "supabase.json file")
 
 	cmd.AddCommand(NewNotesCmd(logger))
 	cmd.AddCommand(NewTranscriptsCmd(logger))
@@ -93,7 +87,7 @@ func initConfig(logger *log.Logger) {
 
 	viper.AutomaticEnv()
 	_ = viper.BindEnv("debug", "DEBUG_MODE")
-	_ = viper.BindEnv("supabase", "SUPABASE_FILE")
+	_ = viper.BindEnv("granola_api_key", "GRANOLA_API_KEY")
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {

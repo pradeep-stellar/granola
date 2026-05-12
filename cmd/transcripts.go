@@ -3,23 +3,24 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/theantichris/granola/internal/cache"
+	"github.com/theantichris/granola/internal/api"
 	"github.com/theantichris/granola/internal/transcript"
 )
 
 var (
-	ErrTranscriptCmdInit  = errors.New("failed to initialize the transcripts command")
-	ErrTranscriptExport   = errors.New("failed to export transcripts")
-	ErrCacheFileNotFound  = errors.New("cache file not found")
-	invalidCharsRegex     = regexp.MustCompile(`[<>:"/\\|?*\x00-\x1f]`)
+	ErrTranscriptCmdInit = errors.New("failed to initialize the transcripts command")
+	ErrTranscriptExport  = errors.New("failed to export transcripts")
+	invalidCharsRegex    = regexp.MustCompile(`[<>:"/\\|?*\x00-\x1f]`)
 )
 
 // NewTranscriptsCmd creates a new transcripts command and binds its flags.
@@ -32,10 +33,9 @@ func NewTranscriptsCmd(logger *log.Logger) *cobra.Command {
 			if err := viper.BindPFlag("transcript-output", cmd.Flags().Lookup("output")); err != nil {
 				return fmt.Errorf("%w: %s", ErrTranscriptCmdInit, err)
 			}
-			if err := viper.BindPFlag("cache-file", cmd.Flags().Lookup("cache")); err != nil {
+			if err := viper.BindPFlag("transcript-timeout", cmd.Flags().Lookup("timeout")); err != nil {
 				return fmt.Errorf("%w: %s", ErrTranscriptCmdInit, err)
 			}
-
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -46,31 +46,41 @@ func NewTranscriptsCmd(logger *log.Logger) *cobra.Command {
 	var output string
 	cmd.Flags().StringVar(&output, "output", "./transcripts", "Output directory for exported transcript files")
 
-	var cacheFile string
-	defaultCachePath := cache.GetDefaultCachePath()
-	cmd.Flags().StringVar(&cacheFile, "cache", defaultCachePath, "Path to Granola cache file")
+	var timeout time.Duration
+	cmd.Flags().DurationVar(&timeout, "timeout", 2*time.Minute, "HTTP timeout for API requests, default 2 minutes")
 
 	return cmd
 }
 
-// writeTranscripts reads the local cache file and exports raw transcripts with timestamps.
+// writeTranscripts fetches notes from the API, retrieves transcripts for each, and writes them to text files.
 func writeTranscripts(logger *log.Logger) error {
-	cacheFile := viper.GetString("cache-file")
+	apiKey := strings.TrimSpace(viper.GetString("granola_api_key"))
+	if apiKey == "" {
+		return fmt.Errorf("%w: set GRANOLA_API_KEY environment variable", ErrNoCredentials)
+	}
 
-	fmt.Println("Reading Granola cache file...")
-	logger.Info("Reading Granola cache file", "file", cacheFile)
-	cacheData, err := cache.ReadCache(cacheFile)
+	apiURL := viper.GetString("api_url")
+	if apiURL == "" {
+		apiURL = granolaPublicAPIURL
+	}
+
+	timeout := viper.GetDuration("transcript-timeout")
+	httpClient := &http.Client{Timeout: timeout}
+
+	fmt.Println("Fetching notes from Granola API...")
+	logger.Info("Fetching notes from Granola API", "url", apiURL)
+
+	documents, err := api.GetNotesWithAPIKey(apiURL, apiKey, httpClient)
 	if err != nil {
 		return fmt.Errorf("%w: %s", ErrTranscriptExport, err)
 	}
 
-	logger.Info("Loaded cache data", "documents", len(cacheData.Documents), "transcripts", len(cacheData.Transcripts))
+	logger.Info("Retrieved notes", "count", len(documents))
 
 	outputDir := viper.GetString("transcript-output")
-	fmt.Printf("Exporting %d transcripts to %s...\n", len(cacheData.Transcripts), outputDir)
+	fmt.Printf("Exporting transcripts for %d notes to %s...\n", len(documents), outputDir)
 	logger.Info("Writing transcripts to files", "output", outputDir)
 
-	// Create output directory
 	if err := appFS.MkdirAll(outputDir, 0755); err != nil {
 		return fmt.Errorf("%w: failed to create output directory: %s", ErrTranscriptExport, err)
 	}
@@ -78,23 +88,7 @@ func writeTranscripts(logger *log.Logger) error {
 	usedFilenames := make(map[string]bool)
 	count := 0
 
-	for docID, segments := range cacheData.Transcripts {
-		// Skip if no segments
-		if len(segments) == 0 {
-			continue
-		}
-
-		// Get document info
-		doc, ok := cacheData.Documents[docID]
-		if !ok {
-			// Use docID if document not found
-			doc = cache.Document{
-				ID:    docID,
-				Title: docID,
-			}
-		}
-
-		// Generate filename
+	for _, doc := range documents {
 		filename := doc.Title
 		if filename == "" {
 			filename = doc.ID
@@ -105,18 +99,26 @@ func writeTranscripts(logger *log.Logger) error {
 
 		filePath := filepath.Join(outputDir, filename+".txt")
 
-		// Check if file needs updating
-		if !shouldUpdateFile(doc, filePath) {
+		if !shouldUpdateFileByDoc(doc, filePath) {
 			continue
 		}
 
-		// Format transcript
+		logger.Debug("Fetching transcript", "id", doc.ID, "title", doc.Title)
+		segments, err := api.GetNoteTranscript(apiURL, doc.ID, apiKey, httpClient)
+		if err != nil {
+			logger.Warn("Failed to fetch transcript, skipping", "id", doc.ID, "error", err)
+			continue
+		}
+
+		if len(segments) == 0 {
+			continue
+		}
+
 		content := transcript.FormatTranscript(doc, segments)
 		if content == "" {
 			continue
 		}
 
-		// Write file
 		if err := afero.WriteFile(appFS, filePath, []byte(content), 0644); err != nil {
 			return fmt.Errorf("%w: failed to write file %s: %s", ErrTranscriptExport, filePath, err)
 		}
@@ -155,21 +157,17 @@ func makeUnique(filename string, used map[string]bool) string {
 	}
 }
 
-// shouldUpdateFile checks if the file needs to be updated based on timestamps.
-func shouldUpdateFile(doc cache.Document, filePath string) bool {
+// shouldUpdateFileByDoc checks if the file needs to be updated based on document timestamps.
+func shouldUpdateFileByDoc(doc api.Document, filePath string) bool {
 	fileInfo, err := appFS.Stat(filePath)
 	if err != nil {
-		// File doesn't exist or other error, write it
 		return true
 	}
 
-	// Parse document's updated_at timestamp
 	docUpdated, err := time.Parse(time.RFC3339, doc.UpdatedAt)
 	if err != nil {
-		// Can't parse timestamp, write the file to be safe
 		return true
 	}
 
-	// If document is newer than file, update it
 	return docUpdated.After(fileInfo.ModTime())
 }

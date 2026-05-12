@@ -24,7 +24,6 @@ func TestWrite(t *testing.T) {
 				Content:   "Meeting content here",
 				CreatedAt: "2024-01-01T00:00:00Z",
 				UpdatedAt: "2024-01-01T00:00:00Z",
-				Tags:      []string{"work"},
 			},
 			{
 				ID:        "doc-2",
@@ -32,7 +31,6 @@ func TestWrite(t *testing.T) {
 				Content:   "More content",
 				CreatedAt: "2024-01-02T00:00:00Z",
 				UpdatedAt: "2024-01-02T00:00:00Z",
-				Tags:      []string{"personal"},
 			},
 		}
 

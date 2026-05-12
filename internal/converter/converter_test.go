@@ -17,7 +17,6 @@ func TestToMarkdown(t *testing.T) {
 			Content:   "This is the meeting content.\n\nWith multiple paragraphs.",
 			CreatedAt: "2024-01-01T00:00:00Z",
 			UpdatedAt: "2024-01-02T00:00:00Z",
-			Tags:      []string{"work", "planning"},
 		}
 
 		result, err := ToMarkdown(doc)
@@ -43,10 +42,6 @@ func TestToMarkdown(t *testing.T) {
 			t.Error("expected markdown to contain updated timestamp")
 		}
 
-		if !strings.Contains(result, "- work") || !strings.Contains(result, "- planning") {
-			t.Error("expected markdown to contain tags")
-		}
-
 		if !strings.Contains(result, "# Test Meeting") {
 			t.Error("expected markdown to contain title as heading")
 		}
@@ -65,7 +60,6 @@ func TestToMarkdown(t *testing.T) {
 			Content:   "",
 			CreatedAt: "2024-01-01T00:00:00Z",
 			UpdatedAt: "2024-01-01T00:00:00Z",
-			Tags:      []string{},
 		}
 
 		result, err := ToMarkdown(doc)
@@ -91,7 +85,6 @@ func TestToMarkdown(t *testing.T) {
 			Content:   "Some content",
 			CreatedAt: "2024-01-01T00:00:00Z",
 			UpdatedAt: "2024-01-01T00:00:00Z",
-			Tags:      nil,
 		}
 
 		result, err := ToMarkdown(doc)

@@ -22,11 +22,11 @@ Export your [Granola](https://granola.ai) notes and transcripts to local files f
 
 ## Why Use This?
 
-- 📝 **Own Your Data** - Keep local copies of all your meeting notes
-- 🎙️ **Full Transcripts** - Export complete, timestamped transcripts of your meetings
-- 💾 **Backup & Migration** - Safeguard your notes or move them to other tools
-- 🔄 **Smart Updates** - Only exports new or changed content
-- ⚡ **Fast & Simple** - One command to export everything
+- **Own Your Data** - Keep local copies of all your meeting notes
+- **Full Transcripts** - Export complete, timestamped transcripts of your meetings
+- **Backup & Migration** - Safeguard your notes or move them to other tools
+- **Smart Updates** - Only exports new or changed content
+- **Fast & Simple** - One command to export everything
 
 ## Installation
 
@@ -47,69 +47,49 @@ If you have Go installed:
 go install github.com/theantichris/granola@latest
 ```
 
+## Authentication
+
+Both commands authenticate using a Granola API key. Set it as an environment variable:
+
+```bash
+export GRANOLA_API_KEY=your_api_key_here
+```
+
+Or add it to a `.env` file in your working directory:
+
+```text
+GRANOLA_API_KEY=your_api_key_here
+```
+
 ## Quick Start
 
 ### Export Your Notes
 
 Your notes are the AI-generated summaries and formatted content from Granola.
 
-**macOS/Linux:**
-
 ```bash
-granola notes --supabase "$HOME/Library/Application Support/Granola/supabase.json"
-```
-
-**Windows (PowerShell):**
-
-```powershell
-granola notes --supabase "$env:APPDATA\Granola\supabase.json"
+granola notes
 ```
 
 Notes will be exported to a `notes/` directory as Markdown files.
+
+To include the full meeting transcript inside each note under a `## Transcript` heading:
+
+```bash
+granola notes --transcript
+```
 
 ### Export Your Transcripts
 
 Transcripts are the raw, timestamped recordings of everything said in your meetings.
 
-**Note:** Transcripts are only available for meetings where you enabled audio recording.
-
-**macOS:**
+**Note:** Only meetings where audio recording was enabled will have transcript content.
 
 ```bash
 granola transcripts
 ```
 
-**Linux:**
-
-```bash
-granola transcripts --cache "$HOME/.config/Granola/cache-v3.json"
-```
-
-**Windows (PowerShell):**
-
-```powershell
-granola transcripts --cache "$env:APPDATA\Granola\cache-v3.json"
-```
-
-Transcripts will be exported to a `transcripts/` directory as text files.
-
-## Where Granola Stores Your Data
-
-### Supabase Credentials File
-
-Granola uses a `supabase.json` file for API authentication:
-
-- **macOS**: `~/Library/Application Support/Granola/supabase.json`
-- **Linux**: `~/.config/Granola/supabase.json` or `~/.local/share/Granola/supabase.json`
-- **Windows**: `%APPDATA%\Granola\supabase.json`
-
-### Cache File (for Transcripts)
-
-Granola stores raw transcripts in a local cache file:
-
-- **macOS**: `~/Library/Application Support/Granola/cache-v3.json`
-- **Linux**: `~/.config/Granola/cache-v3.json` or `~/.local/share/Granola/cache-v3.json`
-- **Windows**: `%APPDATA%\Granola\cache-v3.json`
+Transcripts will be exported to a `transcripts/` directory as plain text files.
 
 ## Common Options
 
@@ -125,15 +105,13 @@ granola transcripts --output ~/Documents/MyTranscripts
 
 ### Set Default Configuration
 
-Create a `.granola.toml` file in your home directory to avoid specifying paths every time:
+Create a `.granola.toml` file in your home directory to avoid specifying flags every time:
 
 ```toml
 # Notes configuration
-supabase = "/Users/yourname/Library/Application Support/Granola/supabase.json"
 output = "/Users/yourname/Documents/Notes"
 
 # Transcripts configuration
-cache-file = "/Users/yourname/Library/Application Support/Granola/cache-v3.json"
 transcript-output = "/Users/yourname/Documents/Transcripts"
 ```
 
@@ -151,15 +129,43 @@ granola notes --debug
 granola transcripts --debug
 ```
 
+## Command Reference
+
+### `granola notes`
+
+Fetches AI-generated notes from the Granola API and writes them as Markdown files.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--output` | `./notes` | Output directory for Markdown files |
+| `--transcript` | `false` | Append full transcript under `## Transcript` in each note |
+| `--timeout` | `2m` | HTTP timeout for API requests |
+
+### `granola transcripts`
+
+Fetches transcripts from the Granola API and writes them as plain text files.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--output` | `./transcripts` | Output directory for text files |
+| `--timeout` | `2m` | HTTP timeout for API requests |
+
+### Global Flags
+
+| Flag | Description |
+|------|-------------|
+| `--debug` | Enable debug logging |
+| `--config` | Path to config file (default: `$HOME/.granola.toml`) |
+
 ## What Gets Exported
 
 ### Notes (Markdown Files)
 
 Each note becomes a separate `.md` file with:
 
-- **YAML frontmatter** - ID, timestamps, tags
+- **YAML frontmatter** - ID and timestamps
 - **Title** - As a top-level heading
-- **Content** - Formatted as Markdown with headings, lists, etc.
+- **Content** - AI-generated summary as Markdown
 
 Example:
 
@@ -168,17 +174,35 @@ Example:
 id: abc-123
 created: "2024-01-01T00:00:00Z"
 updated: "2024-01-02T00:00:00Z"
-tags:
-  - work
-  - planning
 ---
 
-# Meeting Notes
+# Team Sync Meeting
 
 ## Key Points
 
 - First important point
 - Second important point
+```
+
+With `--transcript`, a `## Transcript` section is appended:
+
+```markdown
+---
+id: abc-123
+created: "2024-01-01T00:00:00Z"
+updated: "2024-01-02T00:00:00Z"
+---
+
+# Team Sync Meeting
+
+## Key Points
+
+- First important point
+
+## Transcript
+
+[14:00:04] System: Good morning everyone, how's it going?
+[14:00:06] You: Good morning! Ready to start.
 ```
 
 ### Transcripts (Text Files)
@@ -187,15 +211,16 @@ Each transcript becomes a `.txt` file with:
 
 - **Header** - Title, ID, timestamps, segment count
 - **Timestamped dialogue** - `[HH:MM:SS] Speaker: Text`
-- **Speaker labels** - "System" (others) or "You" (your microphone)
+- **Speaker labels** - `System` (other participants) or `You` (your microphone)
 
 Example:
 
 ```text
 ================================================================================
-🤖 Team Sync Meeting
+Team Sync Meeting
 ID: abc-123
-Created: 2024-01-01T14:00:00.000Z
+Created: 2024-01-01T14:00:00Z
+Updated: 2024-01-01T14:30:00Z
 Segments: 142
 ================================================================================
 
@@ -205,26 +230,25 @@ Segments: 142
 
 ## Troubleshooting
 
-### "Failed to read supabase file"
+### "No API credentials configured"
 
-- Make sure Granola is installed and you've logged in at least once
-- Check that the path to `supabase.json` is correct for your OS
-- Try running Granola app first, then export
+- Set the `GRANOLA_API_KEY` environment variable or add it to a `.env` file
+- Make sure the key is valid and has not expired
 
 ### "No transcripts found"
 
 - Transcripts are only available for meetings where audio recording was enabled
-- Check that the cache file path is correct
-- Make sure you've had at least one meeting with recording enabled
+- The API returns an empty transcript list for meetings without recordings
 
 ### "Permission denied"
 
-- Make sure you have read access to the Granola files
-- Try running without `sudo` - it's not needed
+- Make sure the output directory is writable
+- Running as `sudo` is not needed
 
 ### Need More Help?
 
 - Check the `--help` output: `granola notes --help`
+- Enable debug logging with `--debug` for detailed request information
 - [Open an issue](https://github.com/theantichris/granola/issues) on GitHub
 
 ---
@@ -270,19 +294,17 @@ GOOS=windows GOARCH=amd64 go build -o granola.exe
 granola/
 ├── cmd/                # Command implementations
 │   ├── root.go         # Root command and configuration
-│   ├── notes.go        # Notes export (API-based)
-│   └── transcripts.go  # Transcripts export (cache-based)
+│   ├── notes.go        # Notes export command
+│   └── transcripts.go  # Transcripts export command
 ├── internal/           # Internal packages
-│   ├── api/            # Granola API client
-│   ├── cache/          # Cache file reader
+│   ├── api/            # Granola API client and data models
+│   ├── cache/          # Local cache file reader
 │   ├── converter/      # Document to Markdown converter
-│   ├── prosemirror/    # ProseMirror JSON parser
 │   ├── transcript/     # Transcript formatter
 │   └── writer/         # File system operations
 ├── main.go             # Entry point
 ├── README.md           # This file
 ├── CLAUDE.md           # AI assistant guidelines
-├── SPEC.md             # Technical specification
 └── LICENSE             # MIT License
 ```
 
@@ -359,8 +381,6 @@ Contributions are welcome! Here's how to help:
 - Update documentation as needed
 - Keep PRs focused on a single change
 
-For more details, see [CLAUDE.md](CLAUDE.md) (AI development guidelines) and [SPEC.md](SPEC.md) (technical specification).
-
 ### Key Dependencies
 
 - [Cobra](https://github.com/spf13/cobra) - CLI framework
@@ -370,22 +390,21 @@ For more details, see [CLAUDE.md](CLAUDE.md) (AI development guidelines) and [SP
 
 ### Architecture
 
-**Notes Export (API-based):**
+**Notes Export:**
 
-1. Read Supabase credentials from local file
-2. Authenticate with Granola API
-3. Fetch all documents as JSON
-4. Convert ProseMirror JSON to Markdown
-5. Write files with YAML frontmatter
+1. Authenticate with `GRANOLA_API_KEY`
+2. Fetch all notes from the Granola public API (cursor-based pagination)
+3. Optionally fetch transcript for each note (`--transcript`)
+4. Convert to Markdown with YAML frontmatter
+5. Write files, skipping those that haven't changed
 
-**Transcripts Export (Cache-based):**
+**Transcripts Export:**
 
-1. Read local cache file (double-JSON encoded)
-2. Extract transcript segments by document ID
-3. Format segments with timestamps and speakers
-4. Write text files with metadata headers
-
-For detailed technical documentation, see [SPEC.md](SPEC.md).
+1. Authenticate with `GRANOLA_API_KEY`
+2. Fetch all notes from the Granola public API
+3. Fetch transcript segments for each note
+4. Format segments with timestamps and speaker labels
+5. Write text files with metadata headers, skipping unchanged files
 
 ## License
 
@@ -408,4 +427,4 @@ For issues, questions, or feature requests:
 
 ---
 
-Built with ❤️ by the community
+Built with love by the community
